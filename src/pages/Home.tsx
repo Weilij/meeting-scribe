@@ -4,29 +4,14 @@ import {
   FileAudio, Loader2, AlertCircle, ClipboardPaste,
   Download, Mic, MicOff, Square,
 } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { writeFile } from "@tauri-apps/plugin-fs";
+import { tempDir, join as joinPath } from "@tauri-apps/api/path";
 import { useSettings } from "../store/settingsStore";
 import { summarizeTranscript } from "../services/ai";
 import { AudioRecorder } from "../services/recorder";
-
-// Tauri APIs — only available inside Tauri runtime
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let tauriInvoke: ((cmd: string, args?: any) => Promise<unknown>) | null = null;
-let tauriListen: ((event: string, cb: (e: { payload: unknown }) => void) => Promise<() => void>) | null = null;
-let tauriOpen: ((opts: object) => Promise<string | null>) | null = null;
-let writeFsFile: ((path: string, data: Uint8Array) => Promise<void>) | null = null;
-let pathTempDir: (() => Promise<string>) | null = null;
-let pathJoin: ((...parts: string[]) => Promise<string>) | null = null;
-
-if (typeof window !== "undefined" && "__TAURI__" in window) {
-  import("@tauri-apps/api/core").then((m) => { tauriInvoke = m.invoke; });
-  import("@tauri-apps/api/event").then((m) => { tauriListen = m.listen; });
-  import("@tauri-apps/plugin-dialog").then((m) => { tauriOpen = m.open; });
-  import("@tauri-apps/plugin-fs").then((m) => { writeFsFile = m.writeFile as typeof writeFsFile; });
-  import("@tauri-apps/api/path").then((m) => {
-    pathTempDir = m.tempDir;
-    pathJoin = m.join;
-  });
-}
 
 type Mode = "upload" | "paste" | "record";
 type Status = "idle" | "downloading" | "transcribing" | "summarizing" | "error";
@@ -57,7 +42,6 @@ function formatTime(sec: number) {
     : `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
-// Animated waveform bars
 function Waveform({ analyser, active }: { analyser: AnalyserNode | null; active: boolean }) {
   const BAR_COUNT = 32;
   const [bars, setBars] = useState<number[]>(new Array(BAR_COUNT).fill(0.05));
@@ -110,26 +94,22 @@ export default function Home() {
   const [isDragging, setIsDragging] = useState(false);
   const [downloadPct, setDownloadPct] = useState(0);
 
-  // Recording state
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [recordingDone, setRecordingDone] = useState(false);
   const [analyserNode, setAnalyserNode] = useState<AnalyserNode | null>(null);
+  const [wavBuffer, setWavBuffer] = useState<ArrayBuffer | null>(null);
   const recorderRef = useRef<AudioRecorder | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Download progress listener
   useEffect(() => {
-    let unlisten: (() => void) | null = null;
-    if (tauriListen) {
-      tauriListen("whisper-download-progress", (e) => {
-        setDownloadPct(e.payload as number);
-      }).then((fn) => { unlisten = fn; });
-    }
+    let unlisten: (() => void) | undefined;
+    listen<number>("whisper-download-progress", (e) => {
+      setDownloadPct(e.payload);
+    }).then((fn) => { unlisten = fn; });
     return () => { unlisten?.(); };
   }, []);
 
-  // Cleanup recording on unmount
   useEffect(() => {
     return () => {
       recorderRef.current?.cancel();
@@ -138,18 +118,14 @@ export default function Home() {
   }, []);
 
   const handleSelectFile = async () => {
-    if (tauriOpen) {
-      const path = await tauriOpen({
-        multiple: false,
-        filters: [{ name: "音訊/影片", extensions: ["mp3", "m4a", "wav", "mp4", "webm", "ogg", "flac"] }],
-      });
-      if (path) {
-        setSelectedFilePath(path);
-        setSelectedFileName((path as string).split("/").pop() ?? (path as string));
-        setErrorMsg("");
-      }
-    } else {
-      fileInputRef.current?.click();
+    const path = await openDialog({
+      multiple: false,
+      filters: [{ name: "音訊/影片", extensions: ["mp3", "m4a", "wav", "mp4", "webm", "ogg", "flac"] }],
+    });
+    if (path) {
+      setSelectedFilePath(path as string);
+      setSelectedFileName((path as string).split("/").pop() ?? (path as string));
+      setErrorMsg("");
     }
   };
 
@@ -158,6 +134,7 @@ export default function Home() {
     setRecordingDone(false);
     setSelectedFilePath(null);
     setSelectedFileName("");
+    setWavBuffer(null);
     try {
       const rec = new AudioRecorder();
       const analyser = await rec.start();
@@ -167,30 +144,19 @@ export default function Home() {
       setRecordingTime(0);
       timerRef.current = setInterval(() => setRecordingTime((t) => t + 1), 1000);
     } catch {
-      setErrorMsg("無法存取麥克風，請確認權限設定");
+      setErrorMsg("無法存取麥克風，請在系統設定 → 隱私權 → 麥克風中允許此應用程式");
     }
   };
 
-  const handleStopRecording = async () => {
+  const handleStopRecording = () => {
     if (!recorderRef.current) return;
     clearInterval(timerRef.current!);
     setIsRecording(false);
     setAnalyserNode(null);
-
-    const wavBuffer = recorderRef.current.stop();
-
-    try {
-      if (pathTempDir && pathJoin && writeFsFile) {
-        const tmp = await pathTempDir();
-        const filePath = await pathJoin(tmp, `meeting-scribe-${Date.now()}.wav`);
-        await writeFsFile(filePath, new Uint8Array(wavBuffer));
-        setSelectedFilePath(filePath);
-      }
-      setSelectedFileName(`錄音 ${formatTime(recordingTime)}`);
-      setRecordingDone(true);
-    } catch (err) {
-      setErrorMsg(`儲存錄音失敗：${err instanceof Error ? err.message : String(err)}`);
-    }
+    const buf = recorderRef.current.stop();
+    setWavBuffer(buf);
+    setSelectedFileName(`錄音 ${formatTime(recordingTime)}`);
+    setRecordingDone(true);
   };
 
   const handleCancelRecording = () => {
@@ -201,6 +167,7 @@ export default function Home() {
     setRecordingTime(0);
     setRecordingDone(false);
     setSelectedFilePath(null);
+    setWavBuffer(null);
   };
 
   const handleProcess = async () => {
@@ -212,23 +179,36 @@ export default function Home() {
     let finalTranscript = transcript;
 
     if (mode === "upload" || mode === "record") {
-      if (!selectedFilePath) {
-        setErrorMsg(mode === "record" ? "請先錄音" : "請選擇音訊檔案");
-        return;
+      let filePath = selectedFilePath;
+
+      if (mode === "record") {
+        if (!wavBuffer) { setErrorMsg("請先錄音"); return; }
+        try {
+          const tmp = await tempDir();
+          filePath = await joinPath(tmp, `meeting-scribe-${Date.now()}.wav`);
+          await writeFile(filePath, new Uint8Array(wavBuffer));
+          setSelectedFilePath(filePath);
+        } catch (err) {
+          setErrorMsg(`儲存錄音失敗：${err instanceof Error ? err.message : String(err)}`);
+          return;
+        }
       }
+
+      if (!filePath) { setErrorMsg("請選擇音訊檔案"); return; }
+
       try {
-        const isDownloaded = await tauriInvoke!("is_model_downloaded", { model: settings.whisperModel }) as boolean;
+        const isDownloaded = await invoke<boolean>("is_model_downloaded", { model: settings.whisperModel });
         if (!isDownloaded) {
           setStatus("downloading");
           setDownloadPct(0);
-          await tauriInvoke!("download_whisper_model", { model: settings.whisperModel });
+          await invoke("download_whisper_model", { model: settings.whisperModel });
         }
         setStatus("transcribing");
-        finalTranscript = await tauriInvoke!("transcribe_audio", {
-          filePath: selectedFilePath,
+        finalTranscript = await invoke<string>("transcribe_audio", {
+          filePath,
           model: settings.whisperModel,
           language: settings.outputLanguage,
-        }) as string;
+        });
       } catch (err) {
         setStatus("error");
         setErrorMsg(`語音轉文字失敗：${err instanceof Error ? err.message : String(err)}`);
@@ -269,9 +249,7 @@ export default function Home() {
       <div className="mb-8">
         <h1 className="text-2xl font-semibold text-slate-800">會議記錄</h1>
         <p className="text-slate-500 mt-1">
-          由{" "}
-          <span className="text-indigo-600 font-medium">{PROVIDER_LABELS[settings.aiProvider]}</span>{" "}
-          自動整理大綱重點
+          由 <span className="text-indigo-600 font-medium">{PROVIDER_LABELS[settings.aiProvider]}</span> 自動整理大綱重點
         </p>
       </div>
 
@@ -285,7 +263,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* Mode Tabs */}
       <div className="flex gap-1 p-1 bg-slate-100 rounded-xl mb-6 w-fit">
         {tabs.map(({ id, label, icon }) => (
           <button
@@ -300,7 +277,6 @@ export default function Home() {
         ))}
       </div>
 
-      {/* Upload Mode */}
       {mode === "upload" && (
         <>
           <div
@@ -321,13 +297,10 @@ export default function Home() {
             <input ref={fileInputRef} type="file" accept="audio/*,video/*" className="hidden"
               onChange={(e) => { const f = e.target.files?.[0]; if (f) { setSelectedFileName(f.name); setErrorMsg(""); }}} />
             <FileAudio size={36} className={`mx-auto mb-3 ${selectedFilePath ? "text-green-500" : "text-slate-300"}`} />
-            {selectedFileName ? (
-              <><p className="font-medium text-slate-700">{selectedFileName}</p>
-              <p className="text-slate-400 text-sm mt-1">點擊更換</p></>
-            ) : (
-              <><p className="font-medium text-slate-600">點擊選擇或拖拉音訊檔案</p>
-              <p className="text-slate-400 text-sm mt-1">支援 MP3、M4A、WAV、MP4、OGG、FLAC</p></>
-            )}
+            {selectedFileName
+              ? <><p className="font-medium text-slate-700">{selectedFileName}</p><p className="text-slate-400 text-sm mt-1">點擊更換</p></>
+              : <><p className="font-medium text-slate-600">點擊選擇或拖拉音訊檔案</p><p className="text-slate-400 text-sm mt-1">支援 MP3、M4A、WAV、MP4、OGG、FLAC</p></>
+            }
           </div>
           <div className="mt-3 flex items-center gap-2 text-xs text-slate-400 px-1">
             <Download size={12} />
@@ -336,20 +309,15 @@ export default function Home() {
         </>
       )}
 
-      {/* Paste Mode */}
       {mode === "paste" && (
         <textarea value={transcript} onChange={(e) => setTranscript(e.target.value)}
           placeholder="將會議逐字稿貼到這裡..."
           className="w-full h-64 p-4 border border-slate-200 rounded-2xl text-sm text-slate-700 placeholder-slate-300 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300" />
       )}
 
-      {/* Record Mode */}
       {mode === "record" && (
         <div className="border-2 border-slate-200 rounded-2xl p-8 text-center">
-          {/* Waveform */}
           <Waveform analyser={analyserNode} active={isRecording} />
-
-          {/* Timer */}
           <div className={`text-3xl font-mono font-semibold mb-6 tracking-widest ${isRecording ? "text-red-500" : "text-slate-300"}`}>
             {formatTime(recordingTime)}
           </div>
@@ -380,18 +348,15 @@ export default function Home() {
                 <Mic size={16} />
                 <span>{selectedFileName} 已就緒</span>
               </div>
-              <button onClick={handleCancelRecording}
-                className="text-sm text-slate-400 hover:text-slate-600 underline">
+              <button onClick={handleCancelRecording} className="text-sm text-slate-400 hover:text-slate-600 underline">
                 重新錄音
               </button>
             </div>
           )}
-
           <p className="text-slate-400 text-xs mt-6">錄音完成後點擊「整理重點」進行語音轉文字</p>
         </div>
       )}
 
-      {/* Download progress */}
       {status === "downloading" && (
         <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-xl">
           <div className="flex items-center justify-between mb-2 text-sm font-medium text-blue-700">
