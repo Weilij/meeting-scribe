@@ -13,7 +13,7 @@ const defaultSettings: Settings = {
   openaiModel: "gpt-4o",
 
   geminiApiKey: "",
-  geminiModel: "gemini-1.5-pro",
+  geminiModel: "gemini-2.0-flash",
 
   ollamaBaseUrl: "http://localhost:11434",
   ollamaModel: "llama3",
