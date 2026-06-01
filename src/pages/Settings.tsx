@@ -40,7 +40,7 @@ const PROVIDERS: {
     keyLabel: "Gemini API Key",
     keyPlaceholder: "AIza...",
     docsUrl: "https://aistudio.google.com/app/apikey",
-    models: ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash"],
+    models: ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash-lite", "gemini-1.5-flash"],
     needsKey: true,
   },
   {
@@ -207,7 +207,12 @@ export default function Settings() {
 
         {/* Model Selection */}
         <div>
-          <label className="text-sm font-medium text-slate-600 block mb-1.5">模型</label>
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="text-sm font-medium text-slate-600">模型</label>
+            {activeProvider.id === "gemini" && (
+              <span className="text-xs text-slate-400">可直接輸入模型名稱</span>
+            )}
+          </div>
           {activeProvider.id === "ollama" ? (
             <input
               type="text"
@@ -216,6 +221,31 @@ export default function Settings() {
               placeholder="llama3"
               className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
             />
+          ) : activeProvider.id === "gemini" ? (
+            <>
+              <input
+                type="text"
+                value={getModel(activeProvider.id)}
+                onChange={(e) => setModel(activeProvider.id, e.target.value)}
+                placeholder="gemini-2.5-flash"
+                className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 mb-2"
+              />
+              <div className="flex flex-wrap gap-1.5">
+                {activeProvider.models.map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => setModel(activeProvider.id, m)}
+                    className={`text-xs px-2.5 py-1 rounded-lg border transition-colors ${
+                      getModel(activeProvider.id) === m
+                        ? "bg-indigo-50 border-indigo-300 text-indigo-700"
+                        : "border-slate-200 text-slate-500 hover:border-slate-300"
+                    }`}
+                  >
+                    {m}
+                  </button>
+                ))}
+              </div>
+            </>
           ) : (
             <select
               value={getModel(activeProvider.id)}
