@@ -209,7 +209,7 @@ export default function Settings() {
         <div>
           <div className="flex items-center justify-between mb-1.5">
             <label className="text-sm font-medium text-slate-600">模型</label>
-            {activeProvider.id === "gemini" && (
+            {activeProvider.id !== "ollama" && (
               <span className="text-xs text-slate-400">可直接輸入模型名稱</span>
             )}
           </div>
@@ -221,7 +221,7 @@ export default function Settings() {
               placeholder="llama3"
               className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
             />
-          ) : activeProvider.id === "gemini" ? (
+          ) : (
             <>
               <input
                 type="text"
@@ -246,16 +246,6 @@ export default function Settings() {
                 ))}
               </div>
             </>
-          ) : (
-            <select
-              value={getModel(activeProvider.id)}
-              onChange={(e) => setModel(activeProvider.id, e.target.value)}
-              className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white"
-            >
-              {activeProvider.models.map((m) => (
-                <option key={m} value={m}>{m}</option>
-              ))}
-            </select>
           )}
         </div>
       </section>
@@ -265,12 +255,9 @@ export default function Settings() {
         <div className="flex items-center gap-2 mb-1">
           <Cpu size={18} className="text-indigo-500" />
           <h2 className="font-semibold text-slate-700">Whisper 語音模型</h2>
-          <span className="ml-auto text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
-            即將推出
-          </span>
         </div>
         <p className="text-slate-500 text-sm mb-4">語音轉文字，首次使用自動下載。</p>
-        <div className="space-y-2 opacity-60 pointer-events-none">
+        <div className="space-y-2">
           {WHISPER_MODELS.map((model) => (
             <label
               key={model.value}

@@ -7,6 +7,7 @@ import {
   Packer,
 } from "docx";
 import jsPDF from "jspdf";
+import html2canvas from "html2canvas";
 import type { SummaryResult } from "../types";
 
 function buildWordDoc(summary: SummaryResult, date: string): Document {
@@ -23,10 +24,7 @@ function buildWordDoc(summary: SummaryResult, date: string): Document {
       alignment: AlignmentType.CENTER,
     }),
     new Paragraph({ text: "" }),
-    new Paragraph({
-      text: "摘要",
-      heading: HeadingLevel.HEADING_2,
-    }),
+    new Paragraph({ text: "摘要", heading: HeadingLevel.HEADING_2 }),
     new Paragraph({ text: summary.tldr }),
     new Paragraph({ text: "" }),
     new Paragraph({ text: "大綱", heading: HeadingLevel.HEADING_2 })
@@ -73,7 +71,7 @@ function buildWordDoc(summary: SummaryResult, date: string): Document {
   return new Document({ sections: [{ properties: {}, children: paragraphs }] });
 }
 
-export async function exportToWord(summary: SummaryResult, date: string) {
+export async function exportToWord(summary: SummaryResult, date: string): Promise<void> {
   const doc = buildWordDoc(summary, date);
   const blob = await Packer.toBlob(doc);
   const url = URL.createObjectURL(blob);
@@ -84,69 +82,40 @@ export async function exportToWord(summary: SummaryResult, date: string) {
   URL.revokeObjectURL(url);
 }
 
-export function exportToPDF(summary: SummaryResult, date: string) {
-  const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-
-  const marginLeft = 20;
-  const marginRight = 190;
-  const lineHeight = 7;
-  let y = 25;
-
-  const addText = (text: string, size = 11, bold = false, color = "#000000") => {
-    pdf.setFontSize(size);
-    pdf.setFont("helvetica", bold ? "bold" : "normal");
-    pdf.setTextColor(color);
-    const lines = pdf.splitTextToSize(text, marginRight - marginLeft);
-    lines.forEach((line: string) => {
-      if (y > 275) {
-        pdf.addPage();
-        y = 25;
-      }
-      pdf.text(line, marginLeft, y);
-      y += lineHeight;
-    });
-  };
-
-  const addSection = (title: string) => {
-    y += 3;
-    addText(title, 13, true, "#1e293b");
-    pdf.setDrawColor("#6366f1");
-    pdf.setLineWidth(0.5);
-    pdf.line(marginLeft, y, marginRight, y);
-    y += 5;
-  };
-
-  addText(summary.title, 18, true, "#1e293b");
-  y += 2;
-  addText(`日期：${date}`, 10, false, "#64748b");
-  y += 4;
-
-  addSection("摘要");
-  addText(summary.tldr);
-  y += 2;
-
-  addSection("大綱");
-  summary.outline.forEach((item, i) => {
-    addText(`${i + 1}. ${item.content}`, 11, true);
-    item.children.forEach((child, j) => {
-      addText(`    ${i + 1}.${j + 1} ${child.content}`);
-    });
+export async function exportToPDF(
+  element: HTMLElement,
+  title: string,
+  date: string
+): Promise<void> {
+  const canvas = await html2canvas(element, {
+    scale: 2,
+    useCORS: true,
+    backgroundColor: "#ffffff",
+    scrollX: 0,
+    scrollY: 0,
   });
 
-  addSection("重點整理");
-  summary.keyPoints.forEach((point) => addText(`• ${point}`));
+  const imgData = canvas.toDataURL("image/png");
+  const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
 
-  if (summary.actionItems.length > 0) {
-    addSection("待辦事項");
-    summary.actionItems.forEach((item) => {
-      const text = [
-        item.assignee ? `【${item.assignee}】` : "☐",
-        item.task,
-        item.deadline ? `（${item.deadline}）` : "",
-      ].join(" ");
-      addText(text);
-    });
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = pdf.internal.pageSize.getHeight();
+  const margin = 10;
+  const contentWidth = pageWidth - margin * 2;
+  const imgHeight = (canvas.height * contentWidth) / canvas.width;
+
+  let posY = margin;
+  let remainingHeight = imgHeight;
+
+  pdf.addImage(imgData, "PNG", margin, posY, contentWidth, imgHeight);
+  remainingHeight -= pageHeight - margin * 2;
+
+  while (remainingHeight > 0) {
+    pdf.addPage();
+    posY = margin - (imgHeight - remainingHeight);
+    pdf.addImage(imgData, "PNG", margin, posY, contentWidth, imgHeight);
+    remainingHeight -= pageHeight - margin * 2;
   }
 
-  pdf.save(`${summary.title}-${date}.pdf`);
+  pdf.save(`${title}-${date}.pdf`);
 }
