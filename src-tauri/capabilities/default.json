@@ -7,6 +7,12 @@
     "core:default",
     "opener:default",
     "dialog:allow-open",
-    "dialog:allow-save"
+    "dialog:allow-save",
+    "fs:allow-write-file",
+    "fs:allow-read-file",
+    "fs:allow-temp-write-recursive",
+    "fs:allow-temp-read-recursive",
+    "core:path:allow-resolve",
+    "core:path:allow-join"
   ]
 }
