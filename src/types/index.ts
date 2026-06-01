@@ -18,8 +18,23 @@ export interface SummaryResult {
   actionItems: ActionItem[];
 }
 
+export type AIProvider = "claude" | "openai" | "gemini" | "ollama";
+
 export interface Settings {
+  aiProvider: AIProvider;
+
   claudeApiKey: string;
+  claudeModel: string;
+
+  openaiApiKey: string;
+  openaiModel: string;
+
+  geminiApiKey: string;
+  geminiModel: string;
+
+  ollamaBaseUrl: string;
+  ollamaModel: string;
+
   whisperModel: "tiny" | "base" | "small" | "medium";
   outputLanguage: string;
 }

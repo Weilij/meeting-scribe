@@ -4,7 +4,20 @@ import type { Settings } from "../types";
 const STORAGE_KEY = "meeting-scribe-settings";
 
 const defaultSettings: Settings = {
+  aiProvider: "claude",
+
   claudeApiKey: "",
+  claudeModel: "claude-sonnet-4-6",
+
+  openaiApiKey: "",
+  openaiModel: "gpt-4o",
+
+  geminiApiKey: "",
+  geminiModel: "gemini-1.5-pro",
+
+  ollamaBaseUrl: "http://localhost:11434",
+  ollamaModel: "llama3",
+
   whisperModel: "base",
   outputLanguage: "zh-TW",
 };

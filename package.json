@@ -11,11 +11,13 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.100.1",
+    "@google/generative-ai": "^0.24.1",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-opener": "^2",
     "docx": "^9.7.1",
     "jspdf": "^4.2.1",
     "lucide-react": "^1.17.0",
+    "openai": "^6.39.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-router-dom": "^7.16.0"

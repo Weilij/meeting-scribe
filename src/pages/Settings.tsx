@@ -1,6 +1,66 @@
 import { useState } from "react";
-import { Eye, EyeOff, CheckCircle, Key, Cpu, Languages } from "lucide-react";
+import { Eye, EyeOff, CheckCircle, Key, Cpu, Languages, ExternalLink } from "lucide-react";
 import { useSettings } from "../store/settingsStore";
+import type { AIProvider } from "../types";
+
+const PROVIDERS: {
+  id: AIProvider;
+  name: string;
+  desc: string;
+  keyLabel: string;
+  keyPlaceholder: string;
+  docsUrl: string;
+  models: string[];
+  needsKey: boolean;
+}[] = [
+  {
+    id: "claude",
+    name: "Claude",
+    desc: "Anthropic",
+    keyLabel: "Claude API Key",
+    keyPlaceholder: "sk-ant-...",
+    docsUrl: "https://console.anthropic.com",
+    models: ["claude-sonnet-4-6", "claude-opus-4-8", "claude-haiku-4-5-20251001"],
+    needsKey: true,
+  },
+  {
+    id: "openai",
+    name: "GPT",
+    desc: "OpenAI",
+    keyLabel: "OpenAI API Key",
+    keyPlaceholder: "sk-...",
+    docsUrl: "https://platform.openai.com/api-keys",
+    models: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo"],
+    needsKey: true,
+  },
+  {
+    id: "gemini",
+    name: "Gemini",
+    desc: "Google",
+    keyLabel: "Gemini API Key",
+    keyPlaceholder: "AIza...",
+    docsUrl: "https://aistudio.google.com/app/apikey",
+    models: ["gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash"],
+    needsKey: true,
+  },
+  {
+    id: "ollama",
+    name: "Ollama",
+    desc: "本機免費",
+    keyLabel: "",
+    keyPlaceholder: "",
+    docsUrl: "https://ollama.com",
+    models: ["llama3", "mistral", "qwen2.5", "gemma2"],
+    needsKey: false,
+  },
+];
+
+const PROVIDER_COLORS: Record<AIProvider, string> = {
+  claude: "bg-violet-100 text-violet-700 border-violet-300",
+  openai: "bg-emerald-100 text-emerald-700 border-emerald-300",
+  gemini: "bg-blue-100 text-blue-700 border-blue-300",
+  ollama: "bg-slate-100 text-slate-700 border-slate-300",
+};
 
 const WHISPER_MODELS = [
   { value: "tiny", label: "Tiny", desc: "75 MB · 最快，準確度普通" },
@@ -19,10 +79,38 @@ export default function Settings() {
   const { settings, updateSettings } = useSettings();
   const [showKey, setShowKey] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [apiKeyInput, setApiKeyInput] = useState(settings.claudeApiKey);
+
+  const activeProvider = PROVIDERS.find((p) => p.id === settings.aiProvider)!;
+
+  const getApiKey = (id: AIProvider) => {
+    if (id === "claude") return settings.claudeApiKey;
+    if (id === "openai") return settings.openaiApiKey;
+    if (id === "gemini") return settings.geminiApiKey;
+    return "";
+  };
+
+  const setApiKey = (id: AIProvider, value: string) => {
+    if (id === "claude") updateSettings({ claudeApiKey: value });
+    else if (id === "openai") updateSettings({ openaiApiKey: value });
+    else if (id === "gemini") updateSettings({ geminiApiKey: value });
+  };
+
+  const getModel = (id: AIProvider) => {
+    if (id === "claude") return settings.claudeModel;
+    if (id === "openai") return settings.openaiModel;
+    if (id === "gemini") return settings.geminiModel;
+    if (id === "ollama") return settings.ollamaModel;
+    return "";
+  };
+
+  const setModel = (id: AIProvider, value: string) => {
+    if (id === "claude") updateSettings({ claudeModel: value });
+    else if (id === "openai") updateSettings({ openaiModel: value });
+    else if (id === "gemini") updateSettings({ geminiModel: value });
+    else if (id === "ollama") updateSettings({ ollamaModel: value });
+  };
 
   const handleSave = () => {
-    updateSettings({ claudeApiKey: apiKeyInput });
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
@@ -31,62 +119,135 @@ export default function Settings() {
     <div className="max-w-xl mx-auto px-8 py-10">
       <div className="mb-8">
         <h1 className="text-2xl font-semibold text-slate-800">設定</h1>
-        <p className="text-slate-500 mt-1">管理 API 金鑰與應用程式偏好設定</p>
+        <p className="text-slate-500 mt-1">選擇 AI Provider 並填入對應的 API Key</p>
       </div>
 
-      {/* Claude API Key */}
+      {/* AI Provider Selection */}
       <section className="bg-white border border-slate-200 rounded-2xl p-6 mb-5">
         <div className="flex items-center gap-2 mb-4">
           <Key size={18} className="text-indigo-500" />
-          <h2 className="font-semibold text-slate-700">Claude API Key</h2>
+          <h2 className="font-semibold text-slate-700">AI Provider</h2>
         </div>
-        <p className="text-slate-500 text-sm mb-4">
-          前往{" "}
-          <span className="text-indigo-600 font-medium">console.anthropic.com</span>{" "}
-          取得您的 API Key，金鑰僅儲存於本機。
-        </p>
-        <div className="relative">
-          <input
-            type={showKey ? "text" : "password"}
-            value={apiKeyInput}
-            onChange={(e) => setApiKeyInput(e.target.value)}
-            placeholder="sk-ant-..."
-            className="w-full pr-10 pl-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 font-mono"
-          />
-          <button
-            onClick={() => setShowKey(!showKey)}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-          >
-            {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
-          </button>
+
+        {/* Provider Cards */}
+        <div className="grid grid-cols-4 gap-2 mb-6">
+          {PROVIDERS.map((p) => (
+            <button
+              key={p.id}
+              onClick={() => updateSettings({ aiProvider: p.id })}
+              className={`flex flex-col items-center gap-1 py-3 px-2 rounded-xl border-2 text-xs font-medium transition-all ${
+                settings.aiProvider === p.id
+                  ? `${PROVIDER_COLORS[p.id]} border-current`
+                  : "border-slate-200 text-slate-500 hover:border-slate-300 hover:text-slate-700"
+              }`}
+            >
+              <span className="text-lg">
+                {p.id === "claude" && "🟣"}
+                {p.id === "openai" && "🟢"}
+                {p.id === "gemini" && "🔵"}
+                {p.id === "ollama" && "⚫"}
+              </span>
+              <span>{p.name}</span>
+              <span className="text-xs opacity-70">{p.desc}</span>
+            </button>
+          ))}
         </div>
-        {settings.claudeApiKey && (
-          <p className="mt-2 text-xs text-green-600 flex items-center gap-1">
-            <CheckCircle size={12} /> 已設定 API Key
-          </p>
+
+        {/* API Key */}
+        {activeProvider.needsKey ? (
+          <div className="mb-4">
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-sm font-medium text-slate-600">
+                {activeProvider.keyLabel}
+              </label>
+              <a
+                href={activeProvider.docsUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-1 text-xs text-indigo-500 hover:text-indigo-700"
+              >
+                取得 Key <ExternalLink size={11} />
+              </a>
+            </div>
+            <div className="relative">
+              <input
+                type={showKey ? "text" : "password"}
+                value={getApiKey(activeProvider.id)}
+                onChange={(e) => setApiKey(activeProvider.id, e.target.value)}
+                placeholder={activeProvider.keyPlaceholder}
+                className="w-full pr-10 pl-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 font-mono"
+              />
+              <button
+                onClick={() => setShowKey(!showKey)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              >
+                {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+            {getApiKey(activeProvider.id) && (
+              <p className="mt-1.5 text-xs text-green-600 flex items-center gap-1">
+                <CheckCircle size={11} /> 已設定
+              </p>
+            )}
+          </div>
+        ) : (
+          <div className="mb-4">
+            <label className="text-sm font-medium text-slate-600 block mb-1.5">
+              Ollama Server URL
+            </label>
+            <input
+              type="text"
+              value={settings.ollamaBaseUrl}
+              onChange={(e) => updateSettings({ ollamaBaseUrl: e.target.value })}
+              placeholder="http://localhost:11434"
+              className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 font-mono"
+            />
+          </div>
         )}
+
+        {/* Model Selection */}
+        <div>
+          <label className="text-sm font-medium text-slate-600 block mb-1.5">模型</label>
+          {activeProvider.id === "ollama" ? (
+            <input
+              type="text"
+              value={getModel(activeProvider.id)}
+              onChange={(e) => setModel(activeProvider.id, e.target.value)}
+              placeholder="llama3"
+              className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+            />
+          ) : (
+            <select
+              value={getModel(activeProvider.id)}
+              onChange={(e) => setModel(activeProvider.id, e.target.value)}
+              className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white"
+            >
+              {activeProvider.models.map((m) => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+          )}
+        </div>
       </section>
 
       {/* Whisper Model */}
       <section className="bg-white border border-slate-200 rounded-2xl p-6 mb-5">
         <div className="flex items-center gap-2 mb-1">
           <Cpu size={18} className="text-indigo-500" />
-          <h2 className="font-semibold text-slate-700">Whisper 模型</h2>
+          <h2 className="font-semibold text-slate-700">Whisper 語音模型</h2>
           <span className="ml-auto text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
             即將推出
           </span>
         </div>
-        <p className="text-slate-500 text-sm mb-4">
-          語音轉文字模型，首次使用需自動下載。
-        </p>
+        <p className="text-slate-500 text-sm mb-4">語音轉文字，首次使用自動下載。</p>
         <div className="space-y-2 opacity-60 pointer-events-none">
           {WHISPER_MODELS.map((model) => (
             <label
               key={model.value}
-              className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${
+              className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer ${
                 settings.whisperModel === model.value
                   ? "border-indigo-300 bg-indigo-50"
-                  : "border-slate-200 hover:border-slate-300"
+                  : "border-slate-200"
               }`}
             >
               <input
@@ -106,7 +267,7 @@ export default function Settings() {
         </div>
       </section>
 
-      {/* Language */}
+      {/* Output Language */}
       <section className="bg-white border border-slate-200 rounded-2xl p-6 mb-8">
         <div className="flex items-center gap-2 mb-4">
           <Languages size={18} className="text-indigo-500" />
@@ -118,14 +279,11 @@ export default function Settings() {
           className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white"
         >
           {LANGUAGES.map((lang) => (
-            <option key={lang.value} value={lang.value}>
-              {lang.label}
-            </option>
+            <option key={lang.value} value={lang.value}>{lang.label}</option>
           ))}
         </select>
       </section>
 
-      {/* Save Button */}
       <button
         onClick={handleSave}
         className={`w-full py-3 font-medium rounded-xl transition-all flex items-center justify-center gap-2 ${
@@ -134,13 +292,7 @@ export default function Settings() {
             : "bg-indigo-600 hover:bg-indigo-700 text-white"
         }`}
       >
-        {saved ? (
-          <>
-            <CheckCircle size={18} /> 已儲存
-          </>
-        ) : (
-          "儲存設定"
-        )}
+        {saved ? <><CheckCircle size={18} /> 已儲存</> : "儲存設定"}
       </button>
     </div>
   );
