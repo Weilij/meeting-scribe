@@ -6,6 +6,22 @@ MeetingScribe 是一款開源桌面應用程式，讓你用自己的 AI API Key 
 
 ---
 
+## 📥 直接下載安裝（不需要 Git / Node / Rust）
+
+| 平台 | 下載 |
+|------|------|
+| **macOS** (Apple Silicon / Intel) | [MeetingScribe-0.1.0-mac.dmg](https://github.com/Weilij/meeting-scribe/releases/latest) |
+
+**安裝步驟：**
+1. 下載 `.dmg` 檔案
+2. 雙擊打開 → 把 `meeting-scribe.app` 拖到 Applications
+3. **第一次開啟**：右鍵點 App → 選「開啟」→ 確認（繞過 macOS 未簽名警告）
+4. 前往「設定」填入你的 AI API Key 即可使用
+
+> Windows 版本即將推出
+
+---
+
 ## ✨ 功能特色
 
 | 功能 | 說明 |
@@ -20,9 +36,11 @@ MeetingScribe 是一款開源桌面應用程式，讓你用自己的 AI API Key 
 
 ---
 
-## 系統需求
+## 系統需求（自行編譯）
 
-- macOS 13+ 或 Windows 10+
+> 如果只是要使用 App，直接從上方下載即可，不需要以下工具。
+
+- macOS 10.15+ 或 Windows 10+
 - Node.js 18+
 - Rust 1.70+
 - cmake（用於編譯 Whisper.cpp）
